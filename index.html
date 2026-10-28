@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>합리적 선택 계산</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1B2440;--mut:#5B6478;--line:#D5DCE7;--paper:#FFFFFF;--grid:#F3F6FB;
+  --ben:#2E6BE6;--benL:#E3ECFF;--exp:#E2474B;--expL:#FDE6E6;--imp:#E8960C;--impL:#FFF2D6;--opp:#B86E00;--net:#14935F;--netL:#DDF4E9;--sunk:#7C8698;--pen:#D92B2B;
+  --fd:"Jua","Malgun Gothic","맑은 고딕","Apple SD Gothic Neo",sans-serif;
+  --fb:"IBM Plex Sans KR","Malgun Gothic","맑은 고딕","Apple SD Gothic Neo",sans-serif;
+  --hatch:repeating-linear-gradient(-45deg,#EE9F16 0 9px,#F8C766 9px 18px);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#141B30}
+#stage{position:absolute;left:50%;top:50%;width:1600px;height:900px;color:var(--ink);font-family:var(--fb);line-height:1.6;word-break:keep-all;overflow:hidden;user-select:none;
+  background-color:var(--grid);background-image:linear-gradient(rgba(46,107,230,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(46,107,230,.08) 1px,transparent 1px);background-size:28px 28px}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--ben);outline-offset:2px}
+b,strong{font-weight:700}
+
+/* 상단 띠 */
+.top{position:absolute;left:0;top:0;width:1600px;height:72px;background:var(--ink);color:#fff;display:flex;align-items:center;gap:26px;padding:0 28px;z-index:5}
+.top h1{margin:0;font-family:var(--fd);font-weight:400;font-size:31px;letter-spacing:.5px;white-space:nowrap}
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,.1);border-radius:12px;padding:4px}
+.tab{border:0;background:transparent;font-family:var(--fd);font-size:20px;padding:6px 18px;border-radius:9px;color:rgba(255,255,255,.72)}
+.tab.on{background:#fff;color:var(--ink)}
+.nav{display:flex;gap:7px;align-items:center}
+.nav button{width:38px;height:38px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:transparent;font-family:var(--fd);font-size:18px;color:#fff;padding:0}
+.nav button.seen{background:rgba(255,255,255,.18)}
+.nav button.ok{background:var(--net);border-color:var(--net)}
+.nav button.no{background:var(--exp);border-color:var(--exp)}
+.nav button.cur{background:#fff;color:var(--ink);border-color:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.25)}
+.nav button.cur.ok{box-shadow:0 0 0 4px var(--net)}.nav button.cur.no{box-shadow:0 0 0 4px var(--exp)}
+.score{margin-left:auto;font-size:18px;color:rgba(255,255,255,.75);white-space:nowrap}
+.score b{font-family:var(--fd);font-weight:400;font-size:22px;color:#fff}
+.main{position:absolute;left:20px;top:88px;width:1560px;height:796px}
+
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes ap{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.ap{animation:ap .55s both;animation-delay:var(--d,0s)}
+@keyframes pulse{50%{box-shadow:0 0 0 10px rgba(46,107,230,.3)}}
+.pulse{animation:pulse .8s 3}
+.c-o{color:var(--opp);font-weight:700}.c-r{color:var(--exp);font-weight:700}.c-g{color:var(--net);font-weight:700}.c-b{color:var(--ben);font-weight:700}
+
+/* 종이(학습지) */
+.sheet{background:var(--paper);border-radius:6px;position:relative;box-shadow:0 1px 0 #D9E0EA,0 14px 28px -16px rgba(27,36,64,.35)}
+.sheet.margin::before{content:"";position:absolute;left:32px;top:0;bottom:0;width:2px;background:#F4AFAF}
+
+/* 문제 풀기 */
+.pm{display:flex;gap:22px;height:100%}
+.left{width:560px;flex:none;padding:18px 24px 18px 52px;display:flex;flex-direction:column;gap:12px}
+.qhd{display:flex;align-items:baseline;gap:12px}
+.qno{font-family:var(--fd);font-size:20px;color:var(--mut);white-space:nowrap}
+.qno b{font-weight:400;font-size:36px;color:var(--ink);margin-left:2px}
+.left h2{margin:0;font-family:var(--fd);font-weight:400;font-size:28px;line-height:1.25}
+.q{margin:0;font-size:20px}
+.q b{color:var(--ben)}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opt{position:relative;border:2px solid var(--line);border-radius:12px;padding:10px 14px 10px;cursor:pointer;background:#fff;transition:border-color .2s,background .2s,transform .15s,box-shadow .2s}
+.opt:hover{border-color:var(--ink);transform:translateY(-2px);box-shadow:0 8px 16px -10px rgba(27,36,64,.4)}
+.opt.sel{border:3px solid var(--ink);padding:9px 13px;background:#EEF2FA}
+.opt.lock{pointer-events:none}
+.opt h3{margin:0 0 6px;font-family:var(--fd);font-weight:400;font-size:23px;display:flex;align-items:center;gap:8px;line-height:1.2}
+.ob{flex:none;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:2px solid var(--ink);font-size:17px;font-family:var(--fd);color:var(--ink)}
+.opt.sel .ob{background:var(--ink);color:#fff}
+.opt ul{margin:0;padding:0;list-style:none;font-size:18px;line-height:1.55}
+.opt li{display:flex;align-items:center;gap:7px;line-height:1.3;margin:3px 0}
+.opt li::before{content:"";flex:none;width:11px;height:11px;border-radius:3px;background:var(--sunk)}
+.opt li.b::before{background:var(--ben)}.opt li.c::before{background:var(--exp)}
+.opt li span{margin-left:auto;padding-left:6px;font-weight:700;white-space:nowrap}
+.tag{position:absolute;top:-13px;right:10px;background:var(--ink);color:#fff;font-family:var(--fd);font-size:15px;padding:1px 10px;border-radius:20px}
+.sunk{position:relative;display:flex;align-items:center;gap:10px;padding:8px 14px;border:2px dashed #AAB3C2;border-radius:8px;background:#fff;color:#4A5468;font-size:18px}
+.sunk svg{flex:none}
+.sunk .strike{position:absolute;left:-6px;right:-6px;top:50%;height:6px;margin-top:-3px;background:var(--pen);border-radius:3px;transform:scaleX(0);transform-origin:left;transition:transform .6s .5s}
+.sunk .st2{position:absolute;right:-10px;top:-17px;background:var(--pen);color:#fff;font-family:var(--fd);font-size:17px;padding:0 11px;border-radius:6px;transform:rotate(6deg) scale(0);transition:transform .4s 1.1s cubic-bezier(.3,1.6,.5,1)}
+.sunk.out{opacity:.6;transition:opacity .6s 1.4s}
+.sunk.out .strike{transform:scaleX(1)}
+.sunk.out .st2{transform:rotate(6deg) scale(1)}
+.sunk.shake{animation:shake .5s}
+@keyframes shake{0%,100%{transform:none}20%{transform:translateX(-9px)}40%{transform:translateX(9px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+.btns{display:flex;gap:10px}
+.btn{border:2px solid var(--ink);border-radius:10px;background:var(--ink);color:#fff;font-family:var(--fd);font-size:20px;padding:6px 18px}
+.btn.g{background:#fff;color:var(--ink)}
+.btn:disabled{background:#E3E8EF;border-color:#E3E8EF;color:#9AA3B2;cursor:not-allowed}
+.cbox{--c:var(--ink);position:relative;flex:1;min-height:0;overflow:hidden;margin-top:26px;background:#fff;border:2px solid var(--c);border-radius:4px 14px 14px 14px;padding:16px 20px 12px;font-size:20px;animation:fade .5s}
+.cbox-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.ntab{position:absolute;left:0;top:0;z-index:1;background:var(--c);color:#fff;font-family:var(--fd);font-size:16px;padding:1px 12px 0;border-radius:8px 8px 0 0}
+.cbox h4{margin:0 0 6px;font-family:var(--fd);font-weight:400;font-size:1.4em;color:var(--c);line-height:1.2}
+.vdw{display:flex;gap:16px;align-items:center}
+.mk{position:relative;flex:none;width:132px;height:132px}
+.mk svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.mk .pen{fill:none;stroke:var(--pen);stroke-width:8;stroke-linecap:round;stroke-dasharray:480;stroke-dashoffset:480;animation:draw .7s .25s forwards}
+.mk b{position:absolute;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:400;font-size:36px;color:var(--pen);text-shadow:0 0 5px #fff,0 0 3px #fff,0 0 2px #fff}
+.vtx{font-size:1em}
+.vtx .ln2{display:block;font-family:var(--fd);font-size:1.15em;line-height:1.35}
+.hn{margin-top:8px;color:#8A1C1C}
+
+.right{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.track{position:relative;flex:none;display:flex;justify-content:space-between;height:58px}
+.track::before{content:"";position:absolute;left:48px;right:48px;top:13px;height:4px;border-radius:2px;background:#CBD3E0}
+.track .fill{position:absolute;left:48px;top:13px;height:4px;border-radius:2px;background:var(--ink);transition:width .5s}
+.st{position:relative;z-index:1;width:96px;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;padding:0}
+.st i{width:30px;height:30px;border-radius:50%;background:#fff;border:3px solid #CBD3E0;display:flex;align-items:center;justify-content:center;font-style:normal;font-family:var(--fd);font-size:16px;color:#8A94A6;transition:transform .3s}
+.st span{font-size:15px;color:var(--mut);white-space:nowrap}
+.st.past i{border-color:var(--ink);color:var(--ink)}
+.st.now i{background:var(--c);border-color:var(--c);color:#fff;transform:scale(1.18)}
+.st.now span{color:var(--ink);font-weight:700}
+.cap{--c:var(--ink);flex:1;min-height:0;overflow:hidden;padding:14px 24px 12px 28px;border-left:8px solid var(--c);font-size:22px;animation:fade .5s}
+.cap .t{display:block;font-family:var(--fd);font-size:1.3em;color:var(--c);line-height:1.3;margin-bottom:4px}
+.lanes{flex:none;display:flex;flex-direction:column;gap:10px}
+.lane{background:#fff;border:2px solid var(--line);border-radius:14px;padding:8px 18px 4px;transition:border-color .5s,opacity .5s,box-shadow .5s,background .5s,filter .5s}
+.lane.pop{animation:ap .55s both}
+.lh{display:flex;align-items:center;gap:9px;height:38px}
+.lname{font-family:var(--fd);font-size:25px;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.chipb{border-radius:30px;padding:0 13px;font-size:16px;white-space:nowrap;opacity:0;transform:scale(.5);transition:opacity .4s,transform .45s cubic-bezier(.3,1.6,.5,1)}
+.chipb b{font-family:var(--fd);font-weight:400;font-size:19px}
+.chipb.on{opacity:1;transform:scale(1)}
+.kv{background:var(--impL);color:#6B4300;border:2px dashed var(--imp)}
+.kv.glow{animation:glow .9s 2}
+@keyframes glow{50%{box-shadow:0 0 0 9px rgba(232,150,12,.35)}}
+.tot{background:#fff;color:var(--ink);border:2px solid var(--ink)}
+.crown{margin-left:auto;background:var(--net);color:#fff;font-family:var(--fd);border-radius:30px;padding:1px 16px;font-size:20px;white-space:nowrap;opacity:0;transform:scale(0);transition:transform .5s cubic-bezier(.3,1.6,.5,1),opacity .3s}
+.lane.win{border:3px solid var(--net);padding:7px 17px 3px;box-shadow:0 0 0 6px rgba(20,147,95,.15)}
+.lane.win .crown{opacity:1;transform:scale(1)}
+.lane.lose{opacity:.45;filter:saturate(.4)}
+.viz{display:grid;grid-template-columns:90px 1fr;column-gap:12px;margin-top:4px}
+.labs div{height:42px;display:flex;flex-direction:column;justify-content:center;line-height:1.1;font-family:var(--fd);font-size:20px}
+.labs div+div{margin-top:6px}
+.labs small{font-family:var(--fb);color:var(--mut);font-size:14px}
+.tracks{position:relative;height:90px}
+.trk{height:42px;border-radius:8px;display:flex;overflow:hidden;background-color:#F5F7FB;background-image:linear-gradient(90deg,rgba(27,36,64,.07) 1px,transparent 1px);background-size:5% 100%}
+.trk+.trk{margin-top:6px}
+.trk.hl{animation:hl 1s 2}
+@keyframes hl{50%{box-shadow:0 0 0 5px rgba(27,36,64,.35)}}
+.seg{height:100%;width:0;flex:none;transition:width 1s cubic-bezier(.25,.8,.3,1);color:#fff;font-family:var(--fd);font-size:20px;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden}
+.seg.sb{background:var(--ben)}
+.seg.sr{background:var(--exp);box-shadow:inset -3px 0 0 #fff}
+.seg.so{background:var(--hatch);color:#4A2E00;text-shadow:0 0 4px #fff,0 0 2px #fff}
+.seg.tiny{font-size:0}
+.band{position:absolute;top:-5px;height:100px;border:3px dashed var(--net);background:rgba(20,147,95,.16);border-radius:10px;transform:scaleX(0);transform-origin:left;transition:transform .8s ease;pointer-events:none}
+.band.neg{border-color:var(--exp);background:rgba(226,71,75,.13)}
+.band.on{transform:scaleX(1)}
+.glrow{position:relative;height:31px}
+.gl{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap;font-family:var(--fd);font-size:22px;color:var(--net);opacity:0;transition:opacity .4s .6s}
+.gl.neg{color:var(--exp)}
+.gl.on{opacity:1}
+.gl small{font-family:var(--fb);font-size:15px}
+.foot{flex:none;display:flex;justify-content:space-between;font-size:16px;color:var(--mut);padding:0 6px}
+.foot b{font-family:var(--fd);font-weight:400;font-size:19px;color:var(--ink)}
+.chip{position:absolute;z-index:50;background:var(--hatch);color:#4A2E00;font-family:var(--fd);padding:4px 16px;border-radius:30px;border:2px solid #fff;box-shadow:0 8px 18px rgba(0,0,0,.28);font-size:22px;pointer-events:none;white-space:nowrap;text-shadow:0 0 4px #fff}
+.guide{flex:1;padding:26px 34px 26px 40px;display:flex;flex-direction:column;justify-content:center}
+.guide h3{margin:0 0 16px;font-family:var(--fd);font-weight:400;font-size:32px}
+.lad{display:flex;flex-direction:column;gap:9px}
+.lr{display:flex;align-items:center;gap:16px;background:#fff;border:2px solid var(--line);border-radius:12px;padding:8px 16px;font-size:20px}
+.lr .n{flex:none;width:38px;height:38px;border-radius:50%;background:var(--k);color:#fff;font-family:var(--fd);font-size:20px;display:flex;align-items:center;justify-content:center}
+.lr .nm{flex:none;width:200px;font-family:var(--fd);font-size:23px;color:var(--k)}
+.lr.fin{border-color:var(--net);background:var(--netL)}
+.inst,.inst *{transition:none!important;animation:none!important}
+
+/* 개념 익히기 */
+.cm{display:flex;gap:24px;height:100%}
+.ct{width:700px;flex:none;padding:24px 34px 22px 64px;display:flex;flex-direction:column}
+.chd{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.cnum{flex:none;width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;font-family:var(--fd);font-size:28px;display:flex;align-items:center;justify-content:center}
+.ct h2{margin:0;font-family:var(--fd);font-weight:400;font-size:36px;line-height:1.2}
+.ctb{flex:1;min-height:0;overflow:hidden;font-size:23px;animation:fade .5s}
+.ctb p{margin:0 0 .5em}
+.ctb .ex{position:relative;background:#EEF2F8;border-radius:10px;padding:.55em .9em .5em;margin:.2em 0 .6em}
+.ctb .ex::before{content:"예시";position:absolute;top:-.75em;left:.8em;background:var(--mut);color:#fff;font-family:var(--fd);font-size:.7em;padding:0 .6em;border-radius:6px}
+.fm{display:inline-block;background:var(--ink);color:#fff;font-family:var(--fd);font-size:1.05em;border-radius:8px;padding:.08em .7em}
+.cv{flex:1;min-width:0;padding:10px 6px 40px;position:relative;display:flex;flex-direction:column;justify-content:center;gap:16px}
+.cvh{align-self:center;background:var(--ink);color:#fff;font-family:var(--fd);font-size:25px;text-align:center;border-radius:12px;padding:8px 22px}
+.cvh .c-b{color:#9DBDFF}.cvh .c-r{color:#FF9EA0}.cvh .c-o{color:#FFC861}.cvh .c-g{color:#7FE3B8}
+.cvn{align-self:center;font-size:19px;color:var(--ink);background:#fff;border:2px dashed #AAB3C2;border-radius:10px;padding:6px 16px}
+.cfoot{position:absolute;left:6px;right:6px;bottom:6px;display:flex;justify-content:space-between;font-size:16px;color:var(--mut)}
+.cfoot b{font-family:var(--fd);font-weight:400;font-size:19px;color:var(--ink)}
+.bigbtn{border:0;border-radius:14px;background:var(--ink);color:#fff;font-family:var(--fd);font-size:28px;padding:12px 34px;align-self:center;box-shadow:0 10px 20px -10px rgba(27,36,64,.6)}
+/* 1장 */
+.fork{display:flex;flex-direction:column;align-items:center;gap:6px}
+.fbox{background:var(--ink);color:#fff;border-radius:16px;padding:12px 34px;font-family:var(--fd);font-size:32px;text-align:center;line-height:1.3}
+.fbox small{display:block;font-family:var(--fb);font-size:17px;opacity:.8}
+.fsvg{width:600px;height:86px}
+.dl{fill:none;stroke:var(--ink);stroke-width:4;stroke-linecap:round;stroke-dasharray:420;stroke-dashoffset:420;animation:draw .9s .5s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.frow{display:flex;align-items:center;gap:20px}
+.fopt{width:270px;border:2px solid var(--ink);border-radius:14px;padding:12px;text-align:center;font-family:var(--fd);font-size:26px;background:#fff;line-height:1.3}
+.fopt small{display:block;font-family:var(--fb);font-size:17px;color:var(--mut)}
+.fvs{font-family:var(--fd);font-size:34px;color:var(--exp)}
+.fnote{margin-top:8px;font-family:var(--fd);font-size:26px;color:var(--exp)}
+.fl2{font-size:21px;background:#fff;border:2px solid var(--line);border-radius:30px;padding:2px 18px}
+.fmsg{margin-top:6px;font-family:var(--fd);font-size:25px;color:var(--ink);background:var(--impL);border-radius:10px;padding:4px 18px}
+/* 2장 */
+.flow{display:grid;grid-template-columns:1fr 34px 1fr 34px 1fr;row-gap:18px;align-items:center}
+.fl{border:2px solid var(--line);border-radius:14px;padding:10px 12px;text-align:center;font-family:var(--fd);font-size:24px;background:#fff;min-height:108px;display:flex;flex-direction:column;justify-content:center;line-height:1.3}
+.fl small{font-family:var(--fb);font-size:16px;color:var(--mut);margin-top:4px}
+.fl.hot{border:3px solid var(--imp);background:var(--impL);box-shadow:0 0 0 5px rgba(232,150,12,.2)}
+.fa,.fdown{text-align:center;font-family:var(--fd);font-size:28px;color:#8A94A6}
+.fdown{grid-column:5}
+/* 8장 */
+.sk{display:flex;flex-direction:column;gap:14px}
+.skq{align-self:center;font-family:var(--fd);font-size:28px}
+.skrow{display:flex;align-items:center;gap:14px;justify-content:center}
+.skc{position:relative;width:340px;border:2px solid var(--line);border-radius:14px;padding:12px;text-align:center;font-size:19px;background:#fff}
+.skc b{display:block;font-family:var(--fd);font-weight:400;font-size:22px}
+.skx{position:absolute;left:-8px;right:-8px;top:52%;height:6px;background:var(--pen);border-radius:3px;transform:scaleX(0);transform-origin:left;animation:sx .6s 2s forwards}
+@keyframes sx{to{transform:scaleX(1)}}
+.skeq{font-family:var(--fd);font-size:40px;color:var(--mut)}
+.skn{align-self:center;font-family:var(--fd);font-size:24px;color:var(--pen)}
+.skt{border-collapse:separate;border-spacing:0;font-size:19px;align-self:center;background:#fff;border:2px solid var(--line);border-radius:12px;overflow:hidden}
+.skt th,.skt td{padding:7px 14px;text-align:center;border-bottom:1px solid #E6EAF0}
+.skt th{background:var(--ink);color:#fff;font-family:var(--fd);font-weight:400;font-size:19px}
+.skt tr:last-child td{border-bottom:0}
+.skt .pos{color:var(--net);font-family:var(--fd);font-size:22px}.skt .neg{color:var(--exp);font-family:var(--fd);font-size:22px}
+.skt .hlc{background:var(--impL);font-weight:700}
+.skt tr.win td{background:var(--netL)}.skt tr.win td.hlc{background:var(--impL)}
+.skn2{align-self:center;font-family:var(--fd);font-size:24px;color:var(--ink);background:#fff;border-radius:10px;padding:4px 18px}
+/* 9장 */
+.lim{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.lc{position:relative;border-radius:14px;padding:16px 20px 14px;font-size:19px;background:#fff;border:2px solid var(--line);border-top:7px solid var(--k)}
+.lc b{display:block;font-family:var(--fd);font-weight:400;font-size:25px;color:var(--k);margin-bottom:4px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important;transition-delay:0s!important}}
+</style>
+</head>
+<body>
+<div id="stage">
+<div class="top" id="top"></div>
+<div class="main" id="main"></div>
+</div>
+<script>
+const P=[
+{t:"편의점 운영 vs 직장 유지",u:"만 원",s:"갑은 지금 직장에서 연봉 3,000만 원을 받는다. 직장을 그만두고 편의점을 운영하면 1년 매출이 6,000만 원이다.",
+ A:{n:"㉠ 편의점 운영",b:6000,c:[["상품 매입비",2500],["임대료·전기료",1500]]},
+ B:{n:"㉡ 직장 유지",b:3000,c:[]}},
+{t:"아르바이트 vs 영화 관람",u:"원",s:"을은 토요일 3시간 동안 둘 중 하나만 할 수 있다. 수입과 만족은 금액으로 나타냈다.",
+ A:{n:"㉠ 아르바이트",b:30000,c:[["교통비",5000]]},
+ B:{n:"㉡ 영화 관람",b:15000,c:[["영화표",12000]]}},
+{t:"놀이공원 vs 집에서 쉬기",u:"원",s:"병은 환불이 안 되는 놀이공원 입장권을 이미 샀는데, 가기로 한 날 비가 온다.",
+ A:{n:"㉠ 놀이공원 가기",b:25000,c:[["교통비",7000],["식비",8000]]},
+ B:{n:"㉡ 집에서 쉬기",b:12000,c:[]},
+ sunk:["입장권 값",30000],
+ h:"이미 산 입장권이 아까워서 고르지 않았나요? 입장권 값은 어느 쪽을 골라도 돌아오지 않으므로 판단에 넣지 않습니다."},
+{t:"자전거 수리 vs 새 자전거",u:"원",s:"정은 20만 원에 산 자전거가 고장 났다. 고장 난 자전거는 팔 수 없다.",
+ A:{n:"㉠ 수리해서 타기",b:100000,c:[["수리비",80000]]},
+ B:{n:"㉡ 새 자전거 사기",b:150000,c:[["구입비",120000]]},
+ sunk:["처음 구입비",200000],
+ h:"수리비가 구입비보다 적다는 것만 보거나, 처음에 쓴 20만 원이 아까워서 고르지 않았나요? 편익과 비용을 함께 따지고, 이미 쓴 돈은 판단에서 뺍니다."},
+{t:"대학 진학 vs 바로 취업",u:"만 원",s:"무는 고등학교 졸업 후 진로를 고른다. 편익은 앞으로 얻을 소득과 만족을 금액으로 나타낸 것이다.",
+ A:{n:"㉠ 대학 진학",b:12000,c:[["등록금",3500],["교재·생활비",1500]]},
+ B:{n:"㉡ 바로 취업",b:5000,c:[]}},
+{t:"독서실 공부 vs 친구와 놀기",u:"원",s:"기는 주말 오후에 둘 중 하나만 할 수 있다. 성적이 오르는 것과 즐거움을 금액으로 나타냈다.",
+ A:{n:"㉠ 독서실 공부",b:20000,c:[["독서실 이용료",5000]]},
+ B:{n:"㉡ 친구와 놀기",b:25000,c:[["노래방·간식비",12000]]}},
+{t:"휴대전화 요금제 고르기",u:"원",s:"서는 매달 쓰는 데이터와 통화량을 생각해 요금제를 고른다. 편익은 요금제로 얻는 만족을 금액으로 나타낸 것이다.",
+ A:{n:"㉠ 중간 요금제",b:52000,c:[["월 요금",33000]]},
+ B:{n:"㉡ 무제한 요금제",b:70000,c:[["월 요금",55000]]}},
+{t:"학원 계속 다니기 vs 도서관 공부",u:"원",s:"한은 환불이 안 되는 3개월 수강료를 이미 냈다. 학원을 계속 다니거나, 그만두고 도서관에서 공부할 수 있다.",
+ A:{n:"㉠ 학원 계속 다니기",b:30000,c:[["교재비",5000],["교통비",5000]]},
+ B:{n:"㉡ 도서관에서 공부",b:45000,c:[["음료·간식비",5000]]},
+ sunk:["이미 낸 수강료",300000],
+ h:"이미 낸 수강료가 아까워서 고르지 않았나요? 수강료는 어느 쪽을 골라도 돌아오지 않으므로 판단에 넣지 않습니다."},
+{t:"직접 농사 vs 주차장 임대",u:"만 원",s:"농부 오는 자기 땅을 1년 동안 한 가지 방식으로만 쓸 수 있다.",
+ A:{n:"㉠ 직접 농사",b:5000,c:[["종자·비료·농약",2000]]},
+ B:{n:"㉡ 주차장 임대",b:4000,c:[["관리비",500]]}},
+{t:"체험학습 vs 교내 행사",u:"만 원",s:"학급에서 행사 방식을 정한다. 편익은 학생들의 만족을 금액으로 나타낸 것이다.",
+ A:{n:"㉠ 체험학습",b:70,c:[["버스 대절",20],["입장료",10]]},
+ B:{n:"㉡ 교내 행사",b:45,c:[["재료비",10]]}}
+];
+const EX={u:"원",A:{n:"㉠ 카페 아르바이트",b:40000,c:[["교통비",4000]]},B:{n:"㉡ 콘서트 관람",b:50000,c:[["티켓",30000]]}};
+const st=P.map(()=>({pick:null,done:false,ok:null,shown:false,step:0}));
+let mode="concept",slide=0,cur=0,timers=[],SC=1;
+const $=id=>document.getElementById(id);
+const stage=$("stage");
+function rescale(){SC=Math.min(innerWidth/1600,innerHeight/900);stage.style.transform=`translate(-50%,-50%) scale(${SC})`}
+addEventListener("resize",rescale);rescale();
+const nf=n=>Math.abs(n).toLocaleString("ko-KR");
+const f=(n,u)=>(n<0?"−":"")+nf(n)+u;
+const fs=(n,u)=>(n>0?"+":n<0?"−":"")+nf(n)+u;
+const sum=a=>a.reduce((x,y)=>x+y[1],0);
+const oth=k=>k==="A"?"B":"A";
+const badge=n=>`<span class="ob">${n.slice(0,1)}</span>${n.slice(2)}`;
+function josa(w,a,b){const c=w.charCodeAt(w.length-1);if(c<0xAC00||c>0xD7A3)return w+a;return w+((c-0xAC00)%28?a:b)}
+function T(fn,ms){timers.push(setTimeout(fn,ms))}
+function stopAll(){timers.forEach(clearTimeout);timers=[];document.querySelectorAll(".chip").forEach(c=>c.remove())}
+function fit(el,max,min){if(!el)return;let s=max;el.style.fontSize=s+"px";while(el.scrollHeight>el.clientHeight+1&&s>min){s-=.5;el.style.fontSize=s+"px"}}
+function refit(){fit($("ctb"),23,15);fit($("cap"),22,15);fit($("cbox"),20,14)}
+if(document.fonts){document.fonts.ready.then(refit);document.fonts.onloadingdone=refit}
+function pulse(el){if(!el)return;el.classList.remove("pulse");void el.offsetWidth;el.classList.add("pulse")}
+function calc(p){
+  const c={};
+  for(const k of["A","B"]){const o=p[k];c[k]={b:o.b,e:sum(o.c)};c[k].n=c[k].b-c[k].e}
+  for(const k of["A","B"]){const x=c[k];x.i=c[oth(k)].n;x.cost=x.e+x.i;x.r=x.b-x.cost}
+  c.w=c.A.r>c.B.r?"A":"B";
+  c.max=Math.max(c.A.b,c.A.cost,c.B.b,c.B.cost);
+  return c;
+}
+const SN={situ:"선택 상황",sunk:"매몰비용",ben:"편익",exp:"명시적 비용",imp:"암묵적 비용",opp:"기회비용",net:"순편익",end:"결론"};
+const STC={situ:"#1B2440",sunk:"#7C8698",ben:"#2E6BE6",exp:"#E2474B",imp:"#E8960C",opp:"#B86E00",net:"#14935F",end:"#1B2440"};
+const stepsOf=p=>["situ"].concat(p.sunk?["sunk"]:[],["ben","exp","imp","opp","net","end"]);
+const LAD=[["0","매몰비용 가려내기","이미 써서 돌려받지 못하는 돈은 계산에서 뺀다","#7C8698"],["1","편익","각 대안을 골랐을 때 얻는 이득이나 만족","#2E6BE6"],["2","명시적 비용","그 선택을 위해 실제로 내는 돈","#E2474B"],["3","암묵적 비용","포기한 대안의 편익 − 그 대안의 명시적 비용","#E8960C"],["4","기회비용","명시적 비용 + 암묵적 비용","#B86E00"],["5","순편익","편익 − 기회비용","#14935F"],["6","합리적 선택","순편익이 0보다 큰(가장 큰) 대안을 고른다","#14935F"]];
+function ladderHtml(anim){return `<div class="lad">${LAD.map((x,i)=>`<div class="lr${i===6?" fin":""}${anim?" ap":""}" style="--k:${x[3]};--d:${(i*.3).toFixed(2)}s"><span class="n">${x[0]}</span><span class="nm">${x[1]}</span><span>${x[2]}</span></div>`).join("")}</div>`}
+const RECEIPT=`<svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><path d="M3 2h20v26l-3.3-2.2L16.3 28 13 25.8 9.7 28 6.3 25.8 3 28z" fill="#fff" stroke="#7C8698" stroke-width="2" stroke-linejoin="round"/><path d="M7 9h12M7 14h12M7 19h7" stroke="#7C8698" stroke-width="2" stroke-linecap="round"/></svg>`;
+
+/* ---------- 공통: 막대 시각화 ---------- */
+function laneHtml(p,c,k){
+  const o=p[k],x=c[k],W=v=>v/c.max*100,tiny=v=>W(v)<9?" tiny":"";
+  const reds=o.c.map(it=>`<div class="seg sr${tiny(it[1])}" data-w="${W(it[1])}">${nf(it[1])}</div>`).join("");
+  const lo=W(Math.min(x.b,x.cost)),hi=W(Math.max(x.b,x.cost)),mid=(lo+hi)/2;
+  const pos=mid>70?`left:${hi}%;transform:translateX(-100%)`:mid<30?`left:${lo}%;transform:none`:`left:${mid}%`;
+  const neg=x.r<0?" neg":"";
+  return `<div class="lane" id="ln${k}">
+<div class="lh"><span class="lname">${badge(o.n)}</span><span class="chipb kv" id="kv${k}">편익 − 명시적 비용 <b id="kvv${k}">0</b></span><span class="chipb tot" id="tot${k}">기회비용 <b id="totv${k}">0</b></span><span class="crown">✔ 합리적 선택</span></div>
+<div class="viz">
+ <div class="labs"><div>얻는 것<small>편익</small></div><div>치르는 것<small>기회비용</small></div></div>
+ <div class="tracks">
+  <div class="trk"><div class="seg sb${tiny(x.b)}" data-w="${W(x.b)}" id="sb${k}">${nf(x.b)}</div></div>
+  <div class="trk" id="ct${k}">${reds}<div class="seg so${tiny(x.i)}" data-w="${W(x.i)}" id="so${k}">${nf(x.i)}</div></div>
+  <div class="band${neg}" id="bd${k}" style="left:${lo}%;width:${hi-lo}%"></div>
+ </div>
+ <div></div>
+ <div class="glrow"><div class="gl${neg}" id="gl${k}" style="${pos}">순편익 <span id="glv${k}">0</span> <small>(${x.r>=0?"이득":"손해"})</small></div></div>
+</div></div>`;
+}
+function setW(el){if(el)el.style.width=el.dataset.w+"%"}
+function count(el,to,fmt,ms){
+  if(!el)return;
+  if(!ms){el.textContent=fmt(to);return}
+  const t0=performance.now();
+  (function tick(t){const k=Math.min(1,Math.max(0,(t-t0)/ms)),e=1-Math.pow(1-k,3);el.textContent=fmt(Math.round(to*e));if(k<1&&el.isConnected)requestAnimationFrame(tick)})(t0);
+}
+function fly(a,b,txt,ms){
+  if(!a||!b||!a.isConnected||!b.isConnected)return;
+  const sr=stage.getBoundingClientRect(),ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect();
+  const el=document.createElement("div");el.className="chip";el.textContent=txt;stage.appendChild(el);
+  const w=el.offsetWidth,h=el.offsetHeight;
+  const ax=(ra.left-sr.left+ra.width/2)/SC-w/2,ay=(ra.top-sr.top+ra.height/2)/SC-h/2;
+  const bx=(rb.left-sr.left)/SC,by=(rb.top-sr.top+rb.height/2)/SC-h/2;
+  el.style.left=ax+"px";el.style.top=ay+"px";
+  if(!el.animate){el.remove();return}
+  el.animate([{transform:"translate(0,0) scale(1) rotate(0)"},{transform:`translate(${(bx-ax)*.5}px,${(by-ay)*.5-70}px) scale(1.3) rotate(-6deg)`},{transform:`translate(${bx-ax}px,${by-ay}px) scale(.85) rotate(0)`,opacity:.9}],{duration:ms,easing:"ease-in-out",fill:"forwards"});
+  T(()=>el.remove(),ms+60);
+}
+function apply(step,p,c,anim){
+  const K=["A","B"];
+  if(step==="situ"&&anim)K.forEach((k,i)=>{const l=$("ln"+k);if(l){l.style.animationDelay=(i*.25)+"s";l.classList.add("pop")}});
+  if(step==="sunk"){const e=$("sunkbox");if(e){if(anim)e.classList.add("shake");e.classList.add("out")}}
+  if(step==="ben")K.forEach((k,i)=>{const el=$("sb"+k);anim?T(()=>setW(el),i*500):setW(el)});
+  if(step==="exp")K.forEach((k,j)=>{[...$("ct"+k).querySelectorAll(".sr")].forEach((r,i)=>anim?T(()=>setW(r),j*500+i*450):setW(r))});
+  if(step==="imp")K.forEach(k=>{
+    const kv=$("kv"+k),fmt=v=>f(v,p.u);
+    if(anim){
+      T(()=>{kv.classList.add("on");count($("kvv"+k),c[k].n,fmt,800)},200);
+      T(()=>kv.classList.add("glow"),1300);
+      T(()=>fly(kv,$("so"+oth(k)),fmt(c[k].n),1200),2000);
+      T(()=>setW($("so"+oth(k))),3200);
+    }else{kv.classList.add("on");count($("kvv"+k),c[k].n,fmt,0);setW($("so"+oth(k)))}
+  });
+  if(step==="opp")K.forEach(k=>{
+    const t=$("tot"+k),fmt=v=>f(v,p.u);
+    if(anim){$("ct"+k).classList.add("hl");T(()=>{t.classList.add("on");count($("totv"+k),c[k].cost,fmt,900)},300)}
+    else{t.classList.add("on");count($("totv"+k),c[k].cost,fmt,0)}
+  });
+  if(step==="net")K.forEach(k=>{$("bd"+k).classList.add("on");$("gl"+k).classList.add("on");count($("glv"+k),c[k].r,v=>fs(v,p.u),anim?1200:0)});
+  if(step==="end"||step==="crown"){const add=()=>{$("ln"+c.w).classList.add("win");$("ln"+oth(c.w)).classList.add("lose")};anim?T(add,300):add()}
+}
+
+/* ---------- 상단 ---------- */
+function renderTop(){
+  let nav,score;
+  if(mode==="concept"){
+    nav=CS.map((_,i)=>`<button class="${i===slide?"cur":i<slide?"seen":""}" onclick="goSlide(${i})" aria-label="개념 ${i+1}">${i+1}</button>`).join("");
+    score=`개념 <b>${slide+1}</b> / ${CS.length}`;
+  }else{
+    nav=P.map((_,i)=>{const s=st[i];return `<button class="${i===cur?"cur ":""}${s.done&&s.shown?(s.ok?"ok":"no"):""}" onclick="go(${i})" aria-label="문제 ${i+1}">${i+1}</button>`}).join("");
+    const d=st.filter(x=>x.done&&x.shown),k=d.filter(x=>x.ok).length;
+    score=`확인 <b>${d.length}</b>/${P.length} · 정답 <b>${k}</b>`;
+  }
+  $("top").innerHTML=`<h1>합리적 선택 계산</h1><div class="tabs"><button class="tab ${mode==="concept"?"on":""}" onclick="setMode('concept')">개념 익히기</button><button class="tab ${mode==="problem"?"on":""}" onclick="setMode('problem')">문제 풀기</button></div><div class="nav">${nav}</div><div class="score">${score}</div>`;
+}
+function setMode(m){stopAll();mode=m;m==="concept"?renderConcept():renderProblem(false)}
+
+/* ---------- 개념 익히기 ---------- */
+const exC=calc(EX);
+function lanesV(head,note){return `<div class="cvh">${head}</div><div class="lanes">${laneHtml(EX,exC,"A")}${laneHtml(EX,exC,"B")}</div>${note?`<div class="cvn">${note}</div>`:""}`}
+function lanesRun(idx){
+  const L=["ben","exp","imp","opp","net"],cv=$("cv");
+  cv.classList.add("inst");
+  for(let j=0;j<idx;j++)apply(L[j],EX,exC,false);
+  void cv.offsetWidth;cv.classList.remove("inst");
+  apply(L[idx],EX,exC,true);
+  if(L[idx]==="net")T(()=>apply("crown",EX,exC,true),1500);
+}
+const CS=[
+{t:"희소성과 선택",
+ h:`<p>사람이 갖고 싶고 하고 싶은 것은 끝이 없지만, 그것을 채워 줄 <b>시간·돈·자원은 한정</b>되어 있습니다. 원하는 양에 비해 자원이 부족한 이런 상태를 <b>희소성</b>이라고 합니다.</p>
+<p>희소성 때문에 우리는 모든 것을 가질 수 없고, 무엇을 할지 <b>선택</b>해야 합니다. 그리고 하나를 고르면 다른 것은 반드시 <b>포기</b>하게 됩니다.</p>
+<div class="ex">일요일 오후 2시간이 있습니다. 이 시간에 카페 아르바이트를 하면 콘서트를 볼 수 없고, 콘서트를 보면 아르바이트를 할 수 없습니다.</div>
+<p>경제생활은 무엇을 얻고 무엇을 포기할지 정하는 선택의 연속입니다. 그렇다면 어떤 기준으로 골라야 할까요? 그 기준을 제시하는 것이 <b>합리적 선택</b>입니다.</p>`,
+ v:()=>`<div class="fork">
+<div class="fbox ap" style="--d:.1s">일요일 오후 2시간<small>한 번 쓰면 다시 돌아오지 않는다</small></div>
+<svg class="fsvg" viewBox="0 0 600 86"><path class="dl" d="M300 2 C300 50 150 38 150 84"/><path class="dl" d="M300 2 C300 50 450 38 450 84"/></svg>
+<div class="frow"><div class="fopt ap" style="--d:1.1s">㉠ 카페 아르바이트<small>시급 20,000원 × 2시간</small></div><div class="fvs ap" style="--d:1.6s">VS</div><div class="fopt ap" style="--d:1.1s">㉡ 콘서트 관람<small>티켓 30,000원, 즐거움이 큼</small></div></div>
+<div class="fnote ap" style="--d:2.1s">둘 중 하나만 고를 수 있다</div>
+<div class="fl2 ap" style="--d:2.8s">㉠을 고르면 ㉡을 포기</div>
+<div class="fl2 ap" style="--d:3.3s">㉡을 고르면 ㉠을 포기</div>
+<div class="fmsg ap" style="--d:4.1s">포기한 것의 가치도 선택의 대가에 들어간다</div></div>`},
+{t:"합리적 선택이란",
+ h:`<p><b>합리적 선택</b>은 선택으로 얻는 것(<b>편익</b>)과 그 대가로 치르는 것(<b>기회비용</b>)을 비교하여, 얻는 것이 치르는 것보다 가장 많이 큰 대안을 고르는 것입니다. 얻는 것에서 치르는 것을 뺀 값을 <b>순편익</b>이라고 합니다.</p>
+<p><span class="fm">순편익 = 편익 − 기회비용</span></p>
+<p>경제학에서 말하는 합리성은 결과보다 <b>과정</b>의 합리성입니다. 선택할 때 구할 수 있었던 정보를 바탕으로 편익과 비용을 꼼꼼히 따져 골랐다면, 나중에 결과가 기대와 달라도 합리적인 선택이었다고 봅니다.</p>
+<p>합리적 선택은 보통 오른쪽과 같은 과정을 거칩니다. 핵심은 <b>대안 평가</b> 단계에서 각 대안의 편익과 기회비용을 계산해 비교하는 일입니다. 다음 장부터 그 계산 방법을 하나씩 익힙니다.</p>`,
+ v:()=>{const B=[["① 문제 인식","무엇을 결정해야 하는지 파악"],["② 정보 수집","판단에 필요한 정보 모으기"],["③ 대안 탐색","고를 수 있는 대안 찾기"],["④ 대안 평가","편익과 기회비용을 따져 비교"],["⑤ 선택·실행","가장 나은 대안을 골라 실행"],["⑥ 평가·반성","결과를 돌아보고 다음 선택에 반영"]];
+  const box=i=>`<div class="fl ap${i===3?" hot":""}" style="--d:${(i*.45).toFixed(2)}s">${B[i][0]}<small>${B[i][1]}</small></div>`,ar=(i,s)=>`<div class="fa ap" style="--d:${(i*.45+.2).toFixed(2)}s">${s}</div>`;
+  return `<div class="flow">${box(0)}${ar(0,"→")}${box(1)}${ar(1,"→")}${box(2)}<div></div><div></div><div></div><div></div><div class="fdown ap" style="--d:1.1s">↓</div>${box(5)}${ar(4,"←")}${box(4)}${ar(3,"←")}${box(3)}</div>
+<div class="cvh ap" style="--d:3s">대안 평가: <span class="c-g">순편익 = 편익 − 기회비용</span>이 가장 큰 대안을 고른다</div>`}},
+{t:"편익: 선택으로 얻는 것",
+ h:`<p><b>편익</b>은 어떤 선택으로 얻는 이득이나 만족입니다.</p>
+<p>· 돈으로 받는 것: 아르바이트 수입, 상금, 판매 수입<br>· 마음으로 얻는 것: 즐거움, 뿌듯함, 성적 향상, 건강</p>
+<p>서로 다른 대안을 비교하려면 편익을 같은 단위로 나타내야 합니다. 그래서 '그 만족을 얻기 위해 최대 얼마까지 낼 수 있는가'처럼 만족을 돈으로 바꾸어 나타냅니다.</p>
+<div class="ex">㉠ 카페 아르바이트: 시급 20,000원 × 2시간 = <b>40,000원</b><br>㉡ 콘서트 관람: 즐거움을 돈으로 나타내면 <b>50,000원</b></div>
+<p>파란 막대만 보면 ㉡이 더 좋아 보입니다. 하지만 편익만으로는 결정할 수 없습니다. 그 선택을 위해 무엇을 치러야 하는지도 따져야 하기 때문입니다.</p>`,
+ v:()=>lanesV(`<span class="c-b">편익</span>: 선택으로 얻는 것`,"편익만 보면 ㉡이 더 크다. 그러나 아직 치르는 것을 따지지 않았다."),run:()=>lanesRun(0)},
+{t:"명시적 비용: 실제로 내는 돈",
+ h:`<p><b>명시적 비용</b>은 어떤 선택을 하기 위해 실제로 지출하는 돈입니다. 영수증이 남고 눈에 잘 보이는 비용입니다. 입장료, 교통비, 재료비, 등록금, 임대료가 여기에 속합니다.</p>
+<div class="ex">㉠ 카페 아르바이트: 교통비 <b>4,000원</b><br>㉡ 콘서트 관람: 티켓 <b>30,000원</b></div>
+<p>많은 사람이 비용이라고 하면 여기까지만 생각합니다. 그러나 이 계산에는 중요한 것이 빠져 있습니다.</p>
+<p>2시간을 아르바이트에 쓰면 그 시간에 콘서트를 볼 수 없습니다. 거꾸로 콘서트를 보면 아르바이트로 벌 수 있었던 돈을 벌지 못합니다. 이렇게 <b>하나를 고르면서 포기한 것의 가치</b>도 비용입니다. 다음 장에서 이것을 계산합니다.</p>`,
+ v:()=>lanesV(`<span class="c-r">명시적 비용</span>: 실제로 내는 돈`,"아직 '포기한 것의 가치'가 빠져 있다."),run:()=>lanesRun(1)},
+{t:"암묵적 비용: 포기한 것의 가치",
+ h:`<p><b>암묵적 비용</b>은 실제로 돈이 나가지는 않지만, 그 선택 때문에 포기한 대안에서 얻을 수 있었던 가치입니다. 영수증이 남지 않아 놓치기 쉽습니다. 막대에서는 빗금으로 그립니다.</p>
+<p><span class="fm">암묵적 비용 = 포기한 대안의 편익 − 그 대안의 명시적 비용</span></p>
+<p>포기한 대안을 골랐다면 그 대안의 비용도 냈어야 하므로, 실제로 잃는 것은 그 대안에서 남았을 가치입니다.</p>
+<div class="ex">㉠에서 남는 가치: 40,000 − 4,000 = 36,000원<br>㉡에서 남는 가치: 50,000 − 30,000 = 20,000원<br>㉠을 고르면 ㉡을 포기 → ㉠의 암묵적 비용 <b>20,000원</b><br>㉡을 고르면 ㉠을 포기 → ㉡의 암묵적 비용 <b>36,000원</b></div>
+<p>대안이 셋 이상이면 포기한 대안 가운데 가치가 가장 큰 하나만 넣습니다. 한 번에 하나만 할 수 있었으므로 포기한 것을 모두 더하지 않습니다.</p>`,
+ v:()=>lanesV(`<span class="c-o">암묵적 비용</span> = 포기한 대안의 편익 − 그 대안의 명시적 비용`,"빗금 칩이 맞은편으로 건너간다 = 내가 포기한 상대의 가치가 나의 비용이 된다"),run:()=>lanesRun(2)},
+{t:"기회비용: 치르는 대가 전체",
+ h:`<p><b>기회비용</b>은 어떤 것을 선택할 때 치르는 모든 대가입니다. 실제로 낸 돈(명시적 비용)과 포기한 가치(암묵적 비용)를 더합니다. 경제학에서 비용이라고 하면 이 기회비용을 말합니다.</p>
+<p><span class="fm">기회비용 = 명시적 비용 + 암묵적 비용</span></p>
+<div class="ex">㉠ 기회비용: 4,000 + 20,000 = <b>24,000원</b><br>㉡ 기회비용: 30,000 + 36,000 = <b>66,000원</b></div>
+<p>아래 막대 전체가 기회비용입니다. 모든 선택에는 기회비용이 따릅니다. 돈이 들지 않아 공짜로 보이는 선택도, 시간을 쓰는 순간 그 시간에 할 수 있었던 다른 일을 포기하기 때문입니다.</p>`,
+ v:()=>lanesV(`기회비용 = <span class="c-r">명시적 비용</span> + <span class="c-o">암묵적 비용</span>`,"아래 막대 전체 길이 = 그 선택을 위해 치르는 모든 대가"),run:()=>lanesRun(3)},
+{t:"순편익으로 판단하기",
+ h:`<p><span class="fm">순편익 = 편익 − 기회비용</span></p>
+<p>· 순편익이 0보다 크면: 포기한 것보다 얻는 것이 많다 → 합리적인 선택<br>· 순편익이 0보다 작으면: 포기한 대안이 더 나았다 → 합리적이지 않은 선택</p>
+<div class="ex">㉠: 40,000 − 24,000 = <b>+16,000원</b><br>㉡: 50,000 − 66,000 = <b>−16,000원</b></div>
+<p>따라서 <b>㉠ 카페 아르바이트</b>가 합리적 선택입니다. 편익(파란 막대)만 보면 ㉡이 더 커 보였지만, 기회비용까지 따지면 결과가 달라집니다.</p>
+<p>대안이 둘일 때 두 순편익은 크기가 같고 부호만 반대입니다. 그래서 두 대안에서 남는 가치(36,000원과 20,000원)를 바로 비교해도 같은 결론이 나옵니다.</p>`,
+ v:()=>lanesV(`<span class="c-g">순편익</span> = 편익 − 기회비용`,"점선 칸 = 위아래 막대의 길이 차이 (초록은 이득, 빨강은 손해)"),run:()=>lanesRun(4)},
+{t:"매몰비용: 지나간 비용은 잊는다",
+ h:`<p><b>매몰비용</b>은 이미 지출해서 어떤 선택을 하더라도 되찾을 수 없는 비용입니다. 환불되지 않는 입장권, 이미 낸 수강료, 이미 들인 공사비가 그 예입니다.</p>
+<p>합리적 선택은 앞으로 생길 편익과 비용을 비교하는 일입니다. 매몰비용은 어느 대안을 고르든 똑같이 사라진 돈이므로 대안 사이의 차이를 만들지 못합니다. 그래서 판단에서 뺍니다.</p>
+<div class="ex">콘서트 티켓을 일주일 전에 30,000원에 이미 샀고 환불이 안 된다면? 30,000원은 매몰비용이므로 빼고, 콘서트에 가는 데 앞으로 드는 돈은 0원이 됩니다. 다시 계산하면 ㉡의 순편익이 +14,000원이 되어 콘서트에 가는 것이 합리적입니다.</div>
+<p>결론이 바뀐 까닭은 30,000원을 계산에 넣어서가 아니라, 앞으로 낼 돈이 사라졌기 때문입니다.</p>
+<p><b>매몰비용의 오류</b>: 이미 쓴 돈이 아까워 손해인 선택을 이어 가는 것입니다. 예를 들어 콘서트 날 몸이 아파 즐거움을 거의 얻을 수 없는데도 티켓값이 아까워 억지로 가는 경우입니다.</p>`,
+ v:()=>`<div class="sk">
+<div class="skq ap">티켓 30,000원을 이미 샀고, 환불이 안 된다면?</div>
+<div class="skrow"><div class="skc ap" style="--d:.5s"><b>㉠ 카페 아르바이트를 고르면</b>티켓값 30,000원은 못 돌려받음<i class="skx"></i></div><div class="skeq ap" style="--d:1.1s">=</div><div class="skc ap" style="--d:.5s"><b>㉡ 콘서트 관람을 고르면</b>티켓값 30,000원은 못 돌려받음<i class="skx"></i></div></div>
+<div class="skn ap" style="--d:2.6s">어느 쪽을 골라도 똑같다 → 비교에서 뺀다</div>
+<table class="skt ap" style="--d:3.4s"><tr><th></th><th>편익</th><th>명시적 비용</th><th>암묵적 비용</th><th>순편익</th></tr>
+<tr><td>㉠ 카페 아르바이트</td><td>40,000</td><td>4,000</td><td>50,000</td><td class="neg">−14,000</td></tr>
+<tr class="win"><td>㉡ 콘서트 관람</td><td>50,000</td><td class="hlc">0 (티켓은 이미 있음)</td><td>36,000</td><td class="pos">+14,000</td></tr></table>
+<div class="skn2 ap" style="--d:4.4s">앞으로 낼 돈이 0원이 되어 결론이 ㉡으로 바뀐다</div></div>`},
+{t:"합리적 선택의 한계",
+ h:`<p>합리적 선택 모형은 사람들이 편익과 비용을 정확히 알고, 그 계산대로 고른다고 가정합니다. 그러나 현실의 선택에는 오른쪽과 같은 한계가 있습니다.</p>
+<p>특히 개인에게 합리적인 선택이 모이면 사회 전체에는 바람직하지 않은 결과가 나타날 수 있습니다. 각자 편리함을 좇아 일회용품을 쓰면 쓰레기가 쌓이고, 저마다 물고기를 많이 잡으면 어장이 망가집니다.</p>
+<p>그래서 개인의 합리적 선택만으로는 부족하고, <b>지속가능발전</b>을 위해 경제 주체마다 역할과 책임이 필요합니다. 정부는 환경을 해치는 행위를 규제하거나 세금을 매기고, 기업가는 환경과 노동자를 생각하며 생산하고, 노동자는 성실히 일하며 정당한 권리를 지키고, 소비자는 가격뿐 아니라 생산 과정과 환경 영향까지 따져 윤리적으로 소비할 수 있습니다.</p>`,
+ v:()=>`<div class="lim">
+<div class="lc ap" style="--k:#2E6BE6;--d:.3s"><b>정보와 예측의 한계</b>편익과 비용을 정확히 알기 어렵다. 정보가 부족하고, 미래는 불확실하며, 즐거움 같은 만족을 돈으로 바꾸기도 어렵다.</div>
+<div class="lc ap" style="--k:#E8960C;--d:1.3s"><b>사람의 심리</b>습관, 감정, 눈앞의 이익, 이미 쓴 돈에 대한 미련(매몰비용의 오류) 때문에 계산과 다르게 고르기도 한다.</div>
+<div class="lc ap" style="--k:#E2474B;--d:2.3s"><b>개인과 사회의 충돌</b>나에게 합리적인 선택이 사회 전체에는 손해가 될 수 있다. 예: 일회용품 사용, 공동 어장의 남획, 교통 체증</div>
+<div class="lc ap" style="--k:#14935F;--d:3.3s"><b>효율로 잴 수 없는 가치</b>공정, 약속, 인권, 생명처럼 순편익 계산만으로 판단할 수 없는 가치가 있어 윤리적 판단이 함께 필요하다.</div></div>`},
+{t:"계산 순서 정리",
+ h:`<p>합리적 선택 문제는 오른쪽 순서대로 풀면 됩니다.</p>
+<p><b>자주 하는 실수</b></p>
+<p>① 편익만 비교한다. 얻는 것이 커도 치르는 것이 더 크면 손해입니다.</p>
+<p>② 실제로 내는 돈만 비용으로 본다. 포기한 대안의 가치(암묵적 비용)를 빠뜨리면 기회비용을 작게 잡게 됩니다.</p>
+<p>③ 포기한 대안의 편익을 그대로 암묵적 비용으로 넣는다. 그 대안을 골랐다면 냈어야 할 명시적 비용을 빼야 합니다.</p>
+<p>④ 이미 쓴 돈을 계산에 넣는다. 돌려받지 못하는 돈은 어느 쪽을 골라도 같으므로 뺍니다.</p>
+<p>이제 <b>문제 풀기</b>에서 10개 상황을 직접 판단해 봅시다.</p>`,
+ v:()=>`${ladderHtml(true)}<button class="bigbtn ap" id="toProb" style="--d:2.4s" onclick="setMode('problem')">문제 풀러 가기</button>`}
+];
+function goSlide(i){slide=Math.max(0,Math.min(CS.length-1,i));renderConcept()}
+function renderConcept(){
+  stopAll();
+  const s=CS[slide];
+  $("main").innerHTML=`<div class="cm"><div class="ct sheet margin"><div class="chd"><span class="cnum">${slide+1}</span><h2>${s.t}</h2></div><div class="ctb" id="ctb">${s.h}</div></div><div class="cv" id="cv">${s.v()}<div class="cfoot"><span>${slide<CS.length-1?"화면을 클릭하면 다음 장 (→ 키·스페이스) · ← 키는 이전 장":"마지막 장입니다"}</span><span><b>${slide+1}</b> / ${CS.length}</span></div></div></div>`;
+  fit($("ctb"),23,15);
+  if(s.run)s.run();
+  renderTop();
+}
+
+/* ---------- 문제 풀기 ---------- */
+const CB={
+situ:["희소성과 선택","시간과 돈은 한정되어 있어(희소성) 원하는 것을 모두 할 수 없습니다. 하나를 고르면 다른 것은 포기해야 합니다. <b>합리적 선택</b>은 각 대안을 골랐을 때 얻는 것(편익)과 치르는 것(기회비용)을 비교해, 순편익이 가장 큰 대안을 고르는 것입니다."],
+sunk:["매몰비용","이미 지출해서 어떤 선택을 하더라도 되찾을 수 없는 비용입니다. 어느 대안을 고르든 똑같이 사라진 돈이라 대안 사이의 차이를 만들지 못하므로 판단에서 뺍니다. 이미 쓴 돈이 아까워 손해인 선택을 이어 가는 것을 <b>매몰비용의 오류</b>라고 합니다."],
+ben:["편익","어떤 선택으로 얻는 이득이나 만족입니다. 수입처럼 돈으로 받는 것뿐 아니라 즐거움, 성적 향상처럼 마음으로 얻는 만족도 포함합니다. 서로 비교하려면 같은 단위(원)로 나타냅니다."],
+exp:["명시적 비용","어떤 선택을 위해 실제로 지출하는 돈입니다. 입장료, 교통비, 재료비, 등록금처럼 영수증이 남는, 눈에 보이는 비용입니다."],
+imp:["암묵적 비용","돈이 실제로 나가지는 않지만, 그 선택 때문에 포기한 대안의 가치입니다. 영수증이 남지 않으므로 빗금으로 그립니다. <b>포기한 대안의 편익 − 그 대안의 명시적 비용</b>으로 구하고, 대안이 여럿이면 포기한 대안 가운데 가치가 가장 큰 하나만 넣습니다."],
+opp:["기회비용","어떤 것을 선택할 때 치르는 모든 대가입니다. <b>명시적 비용 + 암묵적 비용</b>. 경제학에서 비용이라고 하면 실제 지출만이 아니라 이 기회비용 전체를 말합니다."],
+net:["순편익","<b>편익 − 기회비용</b>. 0보다 크면 포기한 것보다 얻는 것이 많은 선택이고, 0보다 작으면 포기한 대안이 더 나았던 선택입니다. 순편익이 0보다 큰 대안이 합리적 선택입니다."]
+};
+function optHtml(p,k){
+  const o=p[k],s=st[cur];
+  return `<div class="opt${s.pick===k?" sel":""}${s.done?" lock":""}" onclick="pick('${k}')">${s.done&&s.pick===k?'<span class="tag">내 선택</span>':""}<h3>${badge(o.n)}</h3><ul><li class="b">편익<span>${f(o.b,p.u)}</span></li>${o.c.length?o.c.map(x=>`<li class="c">${x[0]}<span>${f(x[1],p.u)}</span></li>`).join(""):"<li>직접 내는 돈 없음</li>"}</ul></div>`;
+}
+function noteHtml(c,tab,title,body){return `<div class="cbox-wrap" style="--c:${c}"><span class="ntab">${tab}</span><div class="cbox" id="cbox" style="--c:${c}">${title?`<h4>${title}</h4>`:""}${body}</div></div>`}
+function introBody(s){return `두 대안의 편익과 비용을 살펴보고 더 합리적인 쪽을 눌러 고르세요. 그다음 <b>정답 확인</b>을 누르면 오른쪽에서 풀이가 시작됩니다.<br>풀이는 화면을 <b>클릭할 때마다</b> 한 단계씩 넘어갑니다. 키보드의 → 키나 스페이스바를 눌러도 됩니다.<br>개념이 헷갈리면 위의 <b>개념 익히기</b>를 다시 보세요.${s.pick?"":`<br><span class="c-r">아직 대안을 고르지 않았습니다.</span>`}`}
+function renderProblem(anim){
+  stopAll();
+  const p=P[cur],s=st[cur];
+  let L=`<div class="left sheet margin"><div class="qhd"><span class="qno">문제<b>${cur+1}</b></span><h2>${p.t}</h2></div><p class="q">${p.s} <b>합리적인 선택은?</b></p><div class="opts">${optHtml(p,"A")}${optHtml(p,"B")}</div>`;
+  if(p.sunk)L+=`<div class="sunk" id="sunkbox">${RECEIPT}<span>이미 낸 돈: ${p.sunk[0]} <b>${f(p.sunk[1],p.u)}</b> (돌려받을 수 없음)</span><span class="strike"></span><span class="st2">계산에서 제외</span></div>`;
+  L+=`<div class="btns">${s.done?"":`<button class="btn" ${s.pick?"":"disabled"} onclick="check()">정답 확인</button>`}<button class="btn g" ${cur>0?"":"disabled"} onclick="go(${cur-1})">이전 문제</button><button class="btn g" id="nextP" ${cur<P.length-1?"":"disabled"} onclick="go(${cur+1})">다음 문제</button></div><div id="noteSlot">${s.done?"":noteHtml("#1B2440","풀이 방법","",introBody(s))}</div></div>`;
+  $("main").innerHTML=`<div class="pm">${L}<div class="right" id="right">${s.done?"":`<div class="guide sheet"><h3>이런 순서로 계산합니다</h3>${ladderHtml(false)}</div>`}</div></div>`;
+  $("noteSlot").style.cssText="flex:1;min-height:0;display:flex;flex-direction:column";
+  renderTop();
+  if(s.done)show(s.step,anim);else fit($("cbox"),20,14);
+}
+function pick(k){if(st[cur].done)return;st[cur].pick=k;renderProblem(false)}
+function go(i){if(i<0||i>=P.length)return;cur=i;renderProblem(false)}
+function check(){
+  const p=P[cur],s=st[cur];if(!s.pick||s.done)return;
+  const c=calc(p);s.done=true;s.ok=(s.pick===c.w);s.step=0;
+  renderProblem(true);
+}
+function hint(p,c,s){
+  if(p.h)return p.h;
+  const me=c[s.pick],best=c[c.w];
+  if(me.b>best.b)return "편익이 큰 쪽만 보고 고르지 않았나요? 편익에서 기회비용(명시적 비용 + 암묵적 비용)을 빼서 비교해야 합니다.";
+  if(me.e<best.e)return "돈이 덜 드는 쪽만 보고 고르지 않았나요? 편익과 기회비용을 함께 따져야 합니다.";
+  return "명시적 비용과 암묵적 비용을 모두 더했는지 다시 확인해 보세요.";
+}
+function verdictHtml(p,c,s){
+  const mark=s.ok?`<path class="pen" d="M74 12 C 112 12, 128 42, 124 74 C 120 108, 92 126, 62 122 C 30 118, 10 92, 14 62 C 18 34, 42 14, 82 18"/>`:`<path class="pen" d="M18 118 L 116 16"/>`;
+  return `<div class="vdw"><div class="mk"><b>${s.ok?"정답":"오답"}</b><svg viewBox="0 0 132 132">${mark}</svg></div><div class="vtx"><span class="ln2">내 선택: ${p[s.pick].n}</span><span class="ln2">합리적 선택: ${p[c.w].n}</span>${s.ok?`<div>편익과 기회비용을 모두 따져 순편익이 0보다 큰 대안을 골랐습니다.</div>`:`<div class="hn">${hint(p,c,s)}</div>`}</div></div>`;
+}
+function capText(step,p,c){
+  const A=p.A.n,B=p.B.n,u=p.u,a=c.A,b=c.B,F=v=>f(v,u);
+  const items=(o,x)=>o.c.length?o.c.map(it=>`${it[0]} ${F(it[1])}`).join(" + ")+(o.c.length>1?` = <b>${F(x.e)}</b>`:""):"직접 내는 돈 없음 (0)";
+  if(step==="situ")return `이 문제에서 고를 수 있는 대안은 <b>${josa(A,"과","와")}</b> <b>${B}</b>입니다. 두 가지를 함께 할 수는 없으므로, 하나를 고르면 다른 하나는 포기해야 합니다.<br>아래 두 칸에 각 대안을 골랐을 때 <span class="c-b">얻는 것(위 막대)</span>과 <span class="c-r">치르는 것(아래 막대)</span>을 한 단계씩 채워 갑니다. 두 칸의 막대는 같은 눈금으로 그려지므로 길이를 바로 비교할 수 있습니다.<br>마지막에 위 막대가 아래 막대보다 긴 대안, 곧 얻는 것이 치르는 것보다 많은 대안이 합리적 선택입니다.`;
+  if(step==="sunk")return `<b>${p.sunk[0]} ${F(p.sunk[1])}</b>은 이미 낸 돈이고 돌려받을 수 없습니다. ${josa(A,"을","를")} 골라도, ${josa(B,"을","를")} 골라도 이 돈은 똑같이 사라진 상태입니다.<br>두 대안에 똑같이 붙어 있는 금액은 어느 쪽이 나은지를 바꾸지 못합니다. 그래서 왼쪽 영수증에 줄을 긋고 계산에서 뺍니다.<br>'이미 돈을 냈으니 그쪽을 골라야 한다'는 생각이 든다면 매몰비용에 끌려가는 것입니다. 지금부터 새로 생길 편익과 비용만 비교합니다.`;
+  if(step==="ben"){const hi=a.b>b.b?"A":"B";return `파란 막대가 편익, 곧 각 대안을 골랐을 때 얻는 이득이나 만족입니다.<br>${A}의 편익: <b>${F(a.b)}</b><br>${B}의 편익: <b>${F(b.b)}</b><br>편익만 보면 ${josa(p[hi].n,"이","가")} ${F(Math.abs(a.b-b.b))} 더 큽니다. 그러나 편익만 보고 고르면 안 됩니다. 얻는 것이 크더라도 그 대가로 치르는 것이 더 크면 오히려 손해이기 때문입니다. 다음 단계부터 치르는 것을 따집니다.`}
+  if(step==="exp"){const lo=a.e<b.e?"A":"B";return `빨간 막대가 명시적 비용, 곧 그 선택을 위해 실제로 내는 돈입니다.<br>${A}: ${items(p.A,a)}<br>${B}: ${items(p.B,b)}<br>여기까지만 보면 ${josa(p[lo].n,"이","가")} 돈이 덜 듭니다. 그런데 이 계산에는 중요한 것이 빠져 있습니다. 하나를 고르면 다른 하나를 포기한다는 사실, 곧 <b>포기한 대안의 가치</b>입니다.`}
+  if(step==="imp")return `먼저 각 대안에서 실제로 남는 가치(편익 − 명시적 비용)를 구합니다.<br>${A}: ${F(a.b)} − ${F(a.e)} = <b>${F(a.n)}</b> / ${B}: ${F(b.b)} − ${F(b.e)} = <b>${F(b.n)}</b><br>${josa(A,"을","를")} 고르면 ${B}에서 남았을 <b>${F(b.n)}</b>을 포기하므로, 이것이 ${A}의 <span class="c-o">암묵적 비용</span>입니다. 반대로 ${josa(B,"을","를")} 고르면 <b>${F(a.n)}</b>이 ${B}의 암묵적 비용입니다. 빗금 칩이 맞은편으로 건너가는 것은 내가 포기한 상대의 가치가 나의 비용이 된다는 뜻입니다.`+((a.e>0||b.e>0)?`<br>포기한 대안의 편익을 그대로 쓰지 않는 까닭은, 그 대안을 골랐다면 그 대안의 명시적 비용도 냈어야 하기 때문입니다.`:"");
+  if(step==="opp"){const lo=a.e<b.e?"A":"B",hi2=oth(lo);const rm=c[lo].cost>c[hi2].cost?`실제로 내는 돈(빨강)만 보면 ${josa(p[lo].n,"이","가")} 싸 보이지만, 포기한 가치(빗금)까지 더하면 ${p[lo].n}의 기회비용이 더 큽니다.`:`실제로 내는 돈만 보아도, 포기한 가치까지 더해도 ${p[lo].n}의 기회비용이 더 작습니다.`;
+    return `<span class="c-b">기회비용 = 명시적 비용 + 암묵적 비용</span><br>${A}: ${F(a.e)} + ${F(a.i)} = <b>${F(a.cost)}</b><br>${B}: ${F(b.e)} + ${F(b.i)} = <b>${F(b.cost)}</b><br>아래 막대 전체 길이가 기회비용, 곧 그 선택을 위해 치르는 모든 대가입니다. ${rm}`}
+  if(step==="net")return `<span class="c-g">순편익 = 편익 − 기회비용</span><br>${A}: ${F(a.b)} − ${F(a.cost)} = <b>${fs(a.r,u)}</b><br>${B}: ${F(b.b)} − ${F(b.cost)} = <b>${fs(b.r,u)}</b><br>점선 칸이 위아래 막대의 길이 차이, 곧 순편익입니다. 초록 칸은 얻는 것이 치르는 것보다 많은 경우(이득), 빨간 칸은 치르는 것이 더 많은 경우(손해)입니다. 대안이 둘뿐이면 두 순편익은 크기가 같고 부호만 반대입니다.`;
+  const W=p[c.w].n,L=p[oth(c.w)].n,cw=c[c.w],cl=c[oth(c.w)];
+  let ins="";
+  if(cl.b>cw.b)ins+=` 편익만 비교했다면 ${josa(L,"을","를")} 골랐을 것입니다.`;
+  if(cl.e<cw.e)ins+=` 실제로 내는 돈만 비교했다면 ${josa(L,"을","를")} 골랐을 것입니다.`;
+  return `순편익이 0보다 큰 <span class="c-g">${josa(W,"이","가")}</span> 합리적 선택입니다.${ins}<br>합리적 선택은 편익과 기회비용을 함께 따져 순편익이 가장 큰 대안을 고르는 것입니다. 편익이 크다고, 돈이 덜 든다고 합리적인 것이 아닙니다.<br>빠른 확인: 두 대안에서 남는 가치(편익 − 명시적 비용)를 비교해도 ${F(cw.n)} > ${F(cl.n)}로 같은 결론이 나옵니다.`+(p.sunk?`<br>${josa(p.sunk[0],"은","는")} 매몰비용이므로 처음부터 계산에 넣지 않았습니다.`:"");
+}
+function show(k,anim){
+  stopAll();
+  const p=P[cur],s=st[cur],c=calc(p),S=stepsOf(p);
+  k=Math.max(0,Math.min(k,S.length-1));s.step=k;
+  const sk=S[k],col=STC[sk];
+  $("right").innerHTML=`<div class="track"><span class="fill" style="width:calc((100% - 96px) * ${k/(S.length-1)})"></span>${S.map((x,i)=>`<button class="st ${i<k?"past":i===k?"now":""}" style="--c:${STC[x]}" onclick="show(${i},true)"><i>${i+1}</i><span>${SN[x]}</span></button>`).join("")}</div>
+<div class="cap sheet" id="cap" style="--c:${col}"><span class="t">${SN[sk]}</span>${capText(sk,p,c)}</div>
+<div class="lanes">${laneHtml(p,c,"A")}${laneHtml(p,c,"B")}</div>
+<div class="foot"><span>${k<S.length-1?"화면을 클릭하면 다음 단계 (→ 키·스페이스) · ← 키는 이전 단계":"풀이가 끝났습니다. 다음 문제를 눌러 넘어가세요."}</span><span><b>${k+1}</b> / ${S.length}</span></div>`;
+  const sb=$("sunkbox");if(sb)sb.className="sunk";
+  $("noteSlot").innerHTML=sk==="end"?noteHtml("#1B2440","채점","",verdictHtml(p,c,s)):noteHtml(col,"개념 노트",CB[sk][0],CB[sk][1]);
+  fit($("cap"),22,15);fit($("cbox"),20,14);
+  stage.classList.add("inst");
+  for(let j=0;j<k;j++)apply(S[j],p,c,false);
+  if(!anim)apply(S[k],p,c,false);
+  void stage.offsetWidth;stage.classList.remove("inst");
+  if(anim)apply(S[k],p,c,true);
+  if(sk==="end"&&!s.shown){s.shown=true;renderTop()}
+}
+
+/* ---------- 조작 ---------- */
+function next(){
+  if(mode==="concept"){slide<CS.length-1?goSlide(slide+1):pulse($("toProb"));return}
+  const s=st[cur];if(!s.done)return;
+  const S=stepsOf(P[cur]);
+  s.step<S.length-1?show(s.step+1,true):pulse($("nextP"));
+}
+function prev(){
+  if(mode==="concept"){if(slide>0)goSlide(slide-1);return}
+  const s=st[cur];if(s.done&&s.step>0)show(s.step-1,true);
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("button");
+  if(b){setTimeout(()=>b.blur(),0);return}
+  if(e.target.closest(".opt"))return;
+  next();
+});
+document.addEventListener("keydown",e=>{
+  if(["ArrowRight","PageDown"," "].includes(e.key)){e.preventDefault();next()}
+  else if(e.key==="Enter"){e.preventDefault();if(mode==="problem"&&!st[cur].done)check();else next()}
+  else if(["ArrowLeft","PageUp","Backspace"].includes(e.key)){e.preventDefault();prev()}
+});
+renderConcept();
+</script>
+</body>
+</html>
